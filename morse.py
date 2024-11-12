@@ -2,6 +2,7 @@ import gi
 import pyaudio
 import threading
 import numpy as np
+import time
 
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
@@ -24,6 +25,48 @@ class Goertzel:
         self.power = self.s[0] * self.s[0] + self.s[1] * self.s[1]
         self.s[1] = self.s[0]
         return self.power
+
+class MorseDecoder:
+    MORSE_CODE_DICT = {
+        'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 
+        'F': '..-.', 'G': '--.', 'H': '....', 'I': '..', 'J': '.---', 
+        'K': '-.-', 'L': '.-..', 'M': '--', 'N': '-.', 'O': '---', 
+        'P': '.--.', 'Q': '--.-', 'R': '.-.', 'S': '...', 'T': '-', 
+        'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-', 'Y': '-.--', 
+        'Z': '--..', '1': '.----', '2': '..---', '3': '...--', 
+        '4': '....-', '5': '.....', '6': '-....', '7': '--...', 
+        '8': '---..', '9': '----.', '0': '-----', ' ': '/'
+    }
+
+    def __init__(self):
+        self.current_code = ""
+        self.last_time = time.time()
+        self.dash_duration = 0.2
+        self.dot_duration = 0.1
+        self.space_duration = 0.3
+
+    def add_signal(self, power):
+        current_time = time.time()
+        duration = current_time - self.last_time
+
+        if power > 100000:  # Detected tone
+            if duration < self.dot_duration:  # Dot
+                self.current_code += '.'
+            elif duration < self.dash_duration:  # Dash
+                self.current_code += '-'
+        else:  # Detected silence
+            if duration >= self.space_duration:  # Space between letters
+                if self.current_code:
+                    self.decode_current_code()
+                    self.current_code = ""
+
+        self.last_time = current_time
+
+    def decode_current_code(self):
+        for letter, morse in self.MORSE_CODE_DICT.items():
+            if self.current_code == morse:
+                print(f"Detected letter: {letter}")  # Here you can update the GUI instead
+                break
 
 class AudioDecoderApp(Gtk.Window):
     def __init__(self):
@@ -61,18 +104,27 @@ class AudioDecoderApp(Gtk.Window):
         self.is_decoding = False
 
         # Goertzel parameters
-        self.target_freq = 1000  # Frequency for Morse code tone (Hz)
-        self.sample_rate = 44100  # Sample rate
+        self.target_freq = 558  # Frequency for Morse code tone (Hz)
+        self.sample_rate = 48000  # Sample rate
         self.num_samples = 205  # Number of samples to process
         self.goertzel = Goertzel(self.target_freq, self.sample_rate, self.num_samples)
-
+        self.morse_decoder = MorseDecoder()
+    	
     def populate_audio_inputs(self):
         p = pyaudio.PyAudio()
+        self.device_channels = []  # Ensure this list is initialized
+
+        print("Available audio input devices:")
         for i in range(p.get_device_count()):
             device_info = p.get_device_info_by_index(i)
             if device_info['maxInputChannels'] > 0:
+                # Print device name and channel count for debugging
+                print(f"Device {i}: {device_info['name']}, Max Input Channels: {device_info['maxInputChannels']}")
                 self.audio_input_combo.append_text(device_info['name'])
                 self.device_channels.append(device_info['maxInputChannels'])  # Store channel count
+        else:
+            print(f"Device {i}: {device_info['name']} (No input channels)")
+
         p.terminate()
 
     def on_start_clicked(self, widget):
@@ -90,42 +142,38 @@ class AudioDecoderApp(Gtk.Window):
         device_index = self.audio_input_combo.get_active()
         num_channels = self.device_channels[device_index]  # Get the number of channels for the selected device
 
-    # If the number of channels is more than 2, fallback to 1 channel (mono)
-    if num_channels > 2:
-        num_channels = 1
+        # If the number of channels is more than 2, fallback to 1 channel (mono)
+        if num_channels > 2:
+            num_channels = 2
+        print(f"Using {num_channels} channels for the audio stream.")
 
-    try:
-        stream = p.open(format=pyaudio.paInt16,
-                        channels=num_channels,
-                        rate=self.sample_rate,
-                        input=True,
-                        input_device_index=device_index)
+        try:
+            stream = p.open(format=pyaudio.paInt16,
+                            channels=num_channels,
+                            rate=self.sample_rate,
+                            input=True,
+                            input_device_index=device_index)
 
-        while self.is_decoding:
-            data = stream.read(self.num_samples)
-            samples = np.frombuffer(data, dtype=np.int16)
-            power = self.goertzel.process(samples)
+            while self.is_decoding:
+                data = stream.read(self.num_samples)
+                samples = np.frombuffer(data, dtype=np.int16)
+                power = self.goertzel.process(samples)
 
-            # Detect Morse code based on power threshold
-            if power > 100000:  # Adjust threshold as necessary
-                self.update_output("Detected Morse Tone\n")
-            else:
-                self.update_output("No Morse Tone\n")
+                # Pass the power to the Morse decoder
+                self.morse_decoder.add_signal(power)
 
-        stream.stop_stream()
-        stream.close()
-    except Exception as e:
-        self.update_output(f"Error: {str(e)}")
-    finally:
-        p.terminate()
-    
+            stream.stop_stream()
+            stream.close()
+        except Exception as e:
+            self.update_output(f"Error: {str(e)}")
+        finally:
+            p.terminate()
     
     def update_output(self, message):
         buffer = self.output_textview.get_buffer()
         buffer.insert(buffer.get_end_iter(), message)
 
 def main():
-
     app = AudioDecoderApp()
     app.connect("destroy", Gtk.main_quit)
     app.show_all()
