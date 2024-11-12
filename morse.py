@@ -86,9 +86,9 @@ class AudioDecoderApp(Gtk.Window):
             self.decoder_thread.join()
 
     def decode_audio(self):
-    p = pyaudio.PyAudio()
-    device_index = self.audio_input_combo.get_active()
-    num_channels = self.device_channels[device_index]  # Get the number of channels for the selected device
+        p = pyaudio.PyAudio()
+        device_index = self.audio_input_combo.get_active()
+        num_channels = self.device_channels[device_index]  # Get the number of channels for the selected device
 
     # If the number of channels is more than 2, fallback to 1 channel (mono)
     if num_channels > 2:
