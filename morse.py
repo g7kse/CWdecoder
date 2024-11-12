@@ -4,6 +4,8 @@ import threading
 import numpy as np
 import time
 
+from gi.repository import GLib
+
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
 
@@ -68,6 +70,8 @@ class MorseDecoder:
                 print(f"Detected letter: {letter}")  # Here you can update the GUI instead
                 break
 
+
+
 class AudioDecoderApp(Gtk.Window):
     def __init__(self):
         super().__init__(title="CW Decoder")
@@ -75,18 +79,20 @@ class AudioDecoderApp(Gtk.Window):
         self.set_default_size(400, 200)
 
         # Audio input selection
-        self.device_index = 3  # Device 4 is at index 3 (0-based index)
+        self.audio_input_combo = Gtk.ComboBoxText()  # Create a combo box for audio devices
+        self.populate_audio_devices()
 
         # Start and Stop buttons
         self.start_button = Gtk.Button(label="Start")
         self.stop_button = Gtk.Button(label="Stop")
-        
+
         # Output display
         self.output_textview = Gtk.TextView()
         self.output_textview.set_editable(False)
 
         # Layout
         grid = Gtk.Grid()
+        grid.attach(self.audio_input_combo, 0, 0, 2, 1)
         grid.attach(self.start_button, 0, 1, 1, 1)
         grid.attach(self.stop_button, 1, 1, 1, 1)
         grid.attach(self.output_textview, 0, 2, 3, 1)
@@ -98,6 +104,7 @@ class AudioDecoderApp(Gtk.Window):
 
         self.decoder_thread = None
         self.is_decoding = False
+        self.lock = threading.Lock()  # Lock for thread safety
 
         # Goertzel parameters
         self.target_freq = 558  # Frequency for Morse code tone (Hz)
@@ -105,52 +112,71 @@ class AudioDecoderApp(Gtk.Window):
         self.num_samples = 205  # Number of samples to process
         self.goertzel = Goertzel(self.target_freq, self.sample_rate, self.num_samples)
         self.morse_decoder = MorseDecoder()
-    	
-    def on_start_clicked(self, widget):
-        self.is_decoding = True
-        self.decoder_thread = threading.Thread(target=self.decode_audio)
-        self.decoder_thread.start()
 
-    def on_stop_clicked(self, widget):
-        self.is_decoding = False
-        if self.decoder_thread:
-            self.decoder_thread.join()
-   
+    def populate_audio_devices(self):
+        p = pyaudio.PyAudio()
+        self.device_channels = []  # Store the number of channels for each device
+        for i in range(p.get_device_count()):
+            device_info = p.get_device_info_by_index(i)
+            if device_info['maxInputChannels'] > 0:  # Only add input devices
+                self.audio_input_combo.append_text(device_info['name'])
+                self.device_channels.append(device_info['maxInputChannels'])
+        p.terminate()
+
     def decode_audio(self):
         p = pyaudio.PyAudio()
-        device_index = self.audio_input_combo.get_active()
-        num_channels = self.device_channels[device_index] # Get the number of channels for the selected device
+        device_index = self.audio_input_combo.get_active()  # Get selected device index
+        if device_index == -1 or device_index >= len(self.device_channels):
+            self.update_output("Invalid audio device selected.\n")
+            return
 
-        # Ensure we use a valid number of channels (1 or 2)
-        if num_channels < 1:
-            num_channels = 1
-        elif num_channels > 2:
-            num_channels = 2
+        num_channels = self.device_channels[device_index]  # Get the number of channels for the selected device
+        num_channels = min(max(num_channels, 1), 2)  # Ensure channels are 1 or 2
 
-        print(f"Using {num_channels} channels for the audio stream.")
-
+        stream = None
         try:
+            # Open the audio stream with PipeWire (via PyAudio)
             stream = p.open(format=pyaudio.paInt16,
                             channels=num_channels,
                             rate=self.sample_rate,
                             input=True,
-                            input_device_index=self.device_index)
+                            input_device_index=device_index)
 
-            while self.is_decoding:
+            while True:
+                with self.lock:
+                    if not self.is_decoding:
+                        break
                 data = stream.read(self.num_samples)
                 samples = np.frombuffer(data, dtype=np.int16)
                 power = self.goertzel.process(samples)
-                # Pass the power to the Morse decoder
                 self.morse_decoder.add_signal(power)
-            stream.stop_stream()
-            tream.close()
 
         except Exception as e:
-            self.update_output(f"Error: {str(e)}")
+            GLib.idle_add(self.update_output, f"Error: {str(e)}\n")
         finally:
+            if stream is not None:
+                stream.stop_stream()
+                stream.close()
             p.terminate()
-    
+
+    def on_start_clicked(self, widget):
+        with self.lock:
+            self.is_decoding = True
+        self.decoder_thread = threading.Thread(target=self.decode_audio)
+        self.decoder_thread.start()
+        self.update_output("Decoding started...\n")
+
+    def on_stop_clicked(self, widget):
+        with self.lock:
+            self.is_decoding = False
+        if self.decoder_thread:
+            self.decoder_thread.join()  # Ensure the thread has finished before proceeding
+        self.update_output("Decoding stopped.\n")
+
     def update_output(self, message):
+        GLib.idle_add(self.append_text, message)
+
+    def append_text(self, message):
         buffer = self.output_textview.get_buffer()
         buffer.insert(buffer.get_end_iter(), message)
 
