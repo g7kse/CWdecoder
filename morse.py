@@ -75,14 +75,8 @@ class AudioDecoderApp(Gtk.Window):
         self.set_default_size(400, 200)
 
         # Audio input selection
-        # Hard-coded audio device index
-
         self.device_index = 3  # Device 4 is at index 3 (0-based index)
-        '''
-        self.audio_input_combo = Gtk.ComboBoxText()
-        self.device_channels = []  # Store the number of channels for each device
-        self.populate_audio_inputs()
-        '''
+
         # Start and Stop buttons
         self.start_button = Gtk.Button(label="Start")
         self.stop_button = Gtk.Button(label="Stop")
@@ -92,9 +86,7 @@ class AudioDecoderApp(Gtk.Window):
         self.output_textview.set_editable(False)
 
         # Layout
-        grid = Gtk.Grid()
-          #grid.attach(Gtk.Label("Select Audio Input:"), 0, 0, 1, 1)
-          #grid.attach(self.audio_input_combo, 1, 0, 2, 1)
+        grid = Gtk.Grid())
         grid.attach(self.start_button, 0, 1, 1, 1)
         grid.attach(self.stop_button, 1, 1, 1, 1)
         grid.attach(self.output_textview, 0, 2, 3, 1)
@@ -114,24 +106,6 @@ class AudioDecoderApp(Gtk.Window):
         self.goertzel = Goertzel(self.target_freq, self.sample_rate, self.num_samples)
         self.morse_decoder = MorseDecoder()
     	
-    '''
-    def populate_audio_inputs(self):
-        p = pyaudio.PyAudio()
-        self.device_channels = []  # Ensure this list is initialized
-
-        print("Available audio input devices:")
-        for i in range(p.get_device_count()):
-            device_info = p.get_device_info_by_index(i)
-            if device_info['maxInputChannels'] > 0:
-                # Print device name and channel count for debugging
-                print(f"Device {i}: {device_info['name']}, Max Input Channels: {device_info['maxInputChannels']}")
-                self.audio_input_combo.append_text(device_info['name'])
-                self.device_channels.append(device_info['maxInputChannels'])  # Store channel count
-        else:
-            print(f"Device {i}: {device_info['name']} (No input channels)")
-
-        p.terminate()
-    '''
     def on_start_clicked(self, widget):
         self.is_decoding = True
         self.decoder_thread = threading.Thread(target=self.decode_audio)
@@ -141,11 +115,6 @@ class AudioDecoderApp(Gtk.Window):
         self.is_decoding = False
         if self.decoder_thread:
             self.decoder_thread.join()
-
-    '''def decode_audio(self):
-        p = pyaudio.PyAudio()
-        device_index = self.audio_input_combo.get_active()
-        num_channels = self.device_channels[device_index]  # Get the number of channels for the selected device'''
    
     def decode_audio(self):
         p = pyaudio.PyAudio()
@@ -212,7 +181,7 @@ class AudioDecoderApp(Gtk.Window):
         buffer.insert(buffer.get_end_iter(), message)
 
 def main():
-    app = AudioDecoderApp()
+    app = CWDecoderApp()
     app.connect("destroy", Gtk.main_quit)
     app.show_all()
     Gtk.main()
