@@ -149,37 +149,6 @@ class AudioDecoderApp(Gtk.Window):
             self.update_output(f"Error: {str(e)}")
         finally:
             p.terminate()
-
-    def update_output(self, message):
-        buffer = self.output_textview.get_buffer()
-        buffer.insert(buffer.get_end_iter(), message)
-
-        # If the number of channels is more than 2, fallback to 1 channel (mono)
-        if num_channels > 2:
-            num_channels = 2
-        print(f"Using {num_channels} channels for the audio stream.")
-
-        try:
-            stream = p.open(format=pyaudio.paInt16,
-                            channels=num_channels,
-                            rate=self.sample_rate,
-                            input=True,
-                            input_device_index=device_index)
-
-            while self.is_decoding:
-                data = stream.read(self.num_samples)
-                samples = np.frombuffer(data, dtype=np.int16)
-                power = self.goertzel.process(samples)
-
-                # Pass the power to the Morse decoder
-                self.morse_decoder.add_signal(power)
-
-            stream.stop_stream()
-            stream.close()
-        except Exception as e:
-            self.update_output(f"Error: {str(e)}")
-        finally:
-            p.terminate()
     
     def update_output(self, message):
         buffer = self.output_textview.get_buffer()
