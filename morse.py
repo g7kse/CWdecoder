@@ -75,10 +75,14 @@ class AudioDecoderApp(Gtk.Window):
         self.set_default_size(400, 200)
 
         # Audio input selection
+        # Hard-coded audio device index
+
+        self.device_index = 3  # Device 4 is at index 3 (0-based index)
+        '''
         self.audio_input_combo = Gtk.ComboBoxText()
         self.device_channels = []  # Store the number of channels for each device
         self.populate_audio_inputs()
-        
+        '''
         # Start and Stop buttons
         self.start_button = Gtk.Button(label="Start")
         self.stop_button = Gtk.Button(label="Stop")
@@ -89,8 +93,8 @@ class AudioDecoderApp(Gtk.Window):
 
         # Layout
         grid = Gtk.Grid()
-        grid.attach(Gtk.Label("Select Audio Input:"), 0, 0, 1, 1)
-        grid.attach(self.audio_input_combo, 1, 0, 2, 1)
+          #grid.attach(Gtk.Label("Select Audio Input:"), 0, 0, 1, 1)
+          #grid.attach(self.audio_input_combo, 1, 0, 2, 1)
         grid.attach(self.start_button, 0, 1, 1, 1)
         grid.attach(self.stop_button, 1, 1, 1, 1)
         grid.attach(self.output_textview, 0, 2, 3, 1)
@@ -110,6 +114,7 @@ class AudioDecoderApp(Gtk.Window):
         self.goertzel = Goertzel(self.target_freq, self.sample_rate, self.num_samples)
         self.morse_decoder = MorseDecoder()
     	
+    '''
     def populate_audio_inputs(self):
         p = pyaudio.PyAudio()
         self.device_channels = []  # Ensure this list is initialized
@@ -126,7 +131,7 @@ class AudioDecoderApp(Gtk.Window):
             print(f"Device {i}: {device_info['name']} (No input channels)")
 
         p.terminate()
-
+    '''
     def on_start_clicked(self, widget):
         self.is_decoding = True
         self.decoder_thread = threading.Thread(target=self.decode_audio)
@@ -137,10 +142,43 @@ class AudioDecoderApp(Gtk.Window):
         if self.decoder_thread:
             self.decoder_thread.join()
 
-    def decode_audio(self):
+    '''def decode_audio(self):
         p = pyaudio.PyAudio()
         device_index = self.audio_input_combo.get_active()
-        num_channels = self.device_channels[device_index]  # Get the number of channels for the selected device
+        num_channels = self.device_channels[device_index]  # Get the number of channels for the selected device'''
+   
+    def decode_audio(self):
+        p = pyaudio.PyAudio()
+        num_channels = 2  # Since your device has 2 channels
+        print(f"Using {num_channels} channels for the audio stream.")
+        try:
+            stream = p.open(format=pyaudio.paInt16,
+                            channels=num_channels,
+                            rate=self.sample_rate,
+                            input=True,
+                            input_device_index=self.device_index)
+
+            while self.is_decoding:
+                data = stream.read(self.num_samples)
+                samples = np.frombuffer(data, dtype=np.int16)
+                power = self.goertzel.process(samples)
+                # Pass the power to the Morse decoder
+                self.morse_decoder.add_signal(power)
+            stream.stop_stream()
+            stream.close()
+
+        except Exception as e:
+            self.update_output(f"Error: {str(e)}")
+        finally:
+            p.terminate()
+
+    
+
+    def update_output(self, message):
+
+        buffer = self.output_textview.get_buffer()
+
+        buffer.insert(buffer.get_end_iter(), message)
 
         # If the number of channels is more than 2, fallback to 1 channel (mono)
         if num_channels > 2:
