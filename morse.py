@@ -118,8 +118,17 @@ class AudioDecoderApp(Gtk.Window):
    
     def decode_audio(self):
         p = pyaudio.PyAudio()
-        num_channels = 2  # Since your device has 2 channels
+        device_index = self.audio_input_combo.get_active()
+        num_channels = self.device_channels[device_index] # Get the number of channels for the selected device
+
+        # Ensure we use a valid number of channels (1 or 2)
+        if num_channels < 1:
+            num_channels = 1
+        elif num_channels > 2:
+            num_channels = 2
+
         print(f"Using {num_channels} channels for the audio stream.")
+
         try:
             stream = p.open(format=pyaudio.paInt16,
                             channels=num_channels,
@@ -134,7 +143,7 @@ class AudioDecoderApp(Gtk.Window):
                 # Pass the power to the Morse decoder
                 self.morse_decoder.add_signal(power)
             stream.stop_stream()
-            stream.close()
+            tream.close()
 
         except Exception as e:
             self.update_output(f"Error: {str(e)}")
