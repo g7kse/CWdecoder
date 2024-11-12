@@ -141,12 +141,8 @@ class AudioDecoderApp(Gtk.Window):
         finally:
             p.terminate()
 
-    
-
     def update_output(self, message):
-
         buffer = self.output_textview.get_buffer()
-
         buffer.insert(buffer.get_end_iter(), message)
 
         # If the number of channels is more than 2, fallback to 1 channel (mono)
