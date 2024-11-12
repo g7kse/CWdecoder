@@ -70,7 +70,7 @@ class MorseDecoder:
 
 class AudioDecoderApp(Gtk.Window):
     def __init__(self):
-        super().__init__(title="Audio Decoder")
+        super().__init__(title="CW Decoder")
         self.set_border_width(10)
         self.set_default_size(400, 200)
 
@@ -86,7 +86,7 @@ class AudioDecoderApp(Gtk.Window):
         self.output_textview.set_editable(False)
 
         # Layout
-        grid = Gtk.Grid())
+        grid = Gtk.Grid()
         grid.attach(self.start_button, 0, 1, 1, 1)
         grid.attach(self.stop_button, 1, 1, 1, 1)
         grid.attach(self.output_textview, 0, 2, 3, 1)
@@ -177,7 +177,7 @@ class AudioDecoderApp(Gtk.Window):
         buffer.insert(buffer.get_end_iter(), message)
 
 def main():
-    app = CWDecoderApp()
+    app = AudioDecoderApp()
     app.connect("destroy", Gtk.main_quit)
     app.show_all()
     Gtk.main()
